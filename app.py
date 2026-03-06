@@ -28,7 +28,6 @@ for path in (UPLOAD_DIR, OUTPUT_DIR, TMP_DIR):
 SUPPORT_LINKS = {
     "github_sponsors": os.getenv("CLIPCAFE_GITHUB_SPONSORS", "https://github.com/sponsors/BrandonEscamilla"),
     "kofi": os.getenv("CLIPCAFE_KOFI", "https://ko-fi.com/brandon_escamilla"),
-    "buymeacoffee": os.getenv("CLIPCAFE_BMC", "https://buymeacoffee.com/"),
 }
 
 # Prefer bundled runtime when packaged. Fallback to local development path.

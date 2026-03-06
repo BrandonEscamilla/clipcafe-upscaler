@@ -11,7 +11,6 @@ Cinematic video upscaling for macOS, powered by Video2X.
 
 - Ko-fi: https://ko-fi.com/brandon_escamilla
 - GitHub Sponsors: https://github.com/sponsors/BrandonEscamilla
-- Buy Me A Coffee: https://buymeacoffee.com/
 
 ## What You Get
 
@@ -73,7 +72,6 @@ Portable bundle includes:
 
 - `CLIPCAFE_GITHUB_SPONSORS`
 - `CLIPCAFE_KOFI`
-- `CLIPCAFE_BMC`
 - `VIDEO2X_RUNTIME_DIR`
 
 ## Notes
