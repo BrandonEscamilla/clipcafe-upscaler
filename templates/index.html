@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ app_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+
+    <main class="shell reveal">
+      <header class="hero">
+        <p class="eyebrow">Powered by Video2X</p>
+        <h1>{{ app_name }}</h1>
+        <p class="tagline">{{ tagline }}</p>
+        <p class="meta">macOS local app · private processing on your machine</p>
+      </header>
+
+      {% if not is_macos %}
+      <div class="alert error">This app targets macOS only.</div>
+      {% endif %}
+
+      {% if error %}
+      <div class="alert error">{{ error }}</div>
+      {% endif %}
+
+      {% if not runtime_ready %}
+      <div class="alert warn">
+        Video2X runtime not found at:<br />
+        <code>{{ runtime_hint }}</code>
+      </div>
+      {% endif %}
+
+      <section class="panel">
+        <h2>Upscale A Video</h2>
+        <form action="{{ url_for('start_job') }}" method="post" enctype="multipart/form-data" class="form-grid">
+          <label>
+            <span>Upload Video</span>
+            <input type="file" name="video" accept="video/*" required />
+          </label>
+
+          <label>
+            <span>Preset</span>
+            <select name="preset">
+              {% for key, preset in presets.items() %}
+              <option value="{{ key }}">{{ preset.label }} — {{ preset.desc }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          <div class="row">
+            <label>
+              <span>GPU Device</span>
+              <input type="number" name="device" value="0" min="0" />
+            </label>
+
+            <label class="checkbox-wrap">
+              <input type="checkbox" name="copy_audio" checked />
+              <span>Keep original audio</span>
+            </label>
+          </div>
+
+          <button type="submit" {% if not runtime_ready %}disabled{% endif %}>Start Conversion</button>
+        </form>
+      </section>
+
+      <section class="panel support">
+        <h2>Support ClipCafe</h2>
+        <p>If this saves you time, support development:</p>
+        <div class="support-links">
+          <a target="_blank" rel="noopener noreferrer" href="{{ support_links.github_sponsors }}">GitHub Sponsors</a>
+          <a target="_blank" rel="noopener noreferrer" href="{{ support_links.kofi }}">Ko-fi</a>
+          <a target="_blank" rel="noopener noreferrer" href="{{ support_links.buymeacoffee }}">Buy Me A Coffee</a>
+        </div>
+      </section>
+
+      <footer class="footnote">
+        <p>
+          This app wraps Video2X workflows and is intended for personal/local use.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

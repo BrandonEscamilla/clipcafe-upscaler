@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ app_name }} · Job {{ job_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+
+    <main class="shell reveal">
+      <header class="hero compact">
+        <p class="eyebrow">Powered by Video2X</p>
+        <h1>{{ app_name }}</h1>
+        <p class="tagline">Conversion Status</p>
+      </header>
+
+      <section class="panel">
+        <p><strong>Job ID:</strong> <code>{{ job_id }}</code></p>
+
+        <div class="status-row">
+          <span class="status-label">Status</span>
+          <span id="statusBadge" class="badge">loading</span>
+          <span id="progressText">0%</span>
+        </div>
+
+        <div class="progress-wrap">
+          <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+        </div>
+
+        <p><strong>Output:</strong> <code id="outputPath">pending</code></p>
+        <p><strong>Size:</strong> <span id="outputSize">0 B</span></p>
+
+        <p id="downloadWrap" class="hidden">
+          <a id="downloadLink" class="download-btn" href="#">Download Video</a>
+        </p>
+        <p id="error" class="alert error hidden"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Live Logs</h2>
+        <pre id="logs"></pre>
+      </section>
+
+      <section class="panel support">
+        <h2>Support ClipCafe</h2>
+        <div class="support-links">
+          <a target="_blank" rel="noopener noreferrer" href="{{ support_links.github_sponsors }}">GitHub Sponsors</a>
+          <a target="_blank" rel="noopener noreferrer" href="{{ support_links.kofi }}">Ko-fi</a>
+          <a target="_blank" rel="noopener noreferrer" href="{{ support_links.buymeacoffee }}">Buy Me A Coffee</a>
+        </div>
+      </section>
+
+      <p><a class="subtle-link" href="{{ url_for('index') }}">Run another video</a></p>
+    </main>
+
+    <script>
+      const jobId = "{{ job_id }}";
+      const statusBadgeEl = document.getElementById("statusBadge");
+      const progressTextEl = document.getElementById("progressText");
+      const progressBarEl = document.getElementById("progressBar");
+      const logsEl = document.getElementById("logs");
+      const outputPathEl = document.getElementById("outputPath");
+      const outputSizeEl = document.getElementById("outputSize");
+      const errorEl = document.getElementById("error");
+      const downloadWrapEl = document.getElementById("downloadWrap");
+      const downloadLinkEl = document.getElementById("downloadLink");
+
+      function formatBytes(bytes) {
+        if (!bytes) return "0 B";
+        const units = ["B", "KB", "MB", "GB"];
+        let value = bytes;
+        let unit = 0;
+        while (value >= 1024 && unit < units.length - 1) {
+          value /= 1024;
+          unit += 1;
+        }
+        return `${value.toFixed(1)} ${units[unit]}`;
+      }
+
+      function statusClass(status) {
+        if (status === "done") return "badge ok";
+        if (status === "failed") return "badge bad";
+        if (status === "running") return "badge live";
+        return "badge";
+      }
+
+      async function refresh() {
+        const response = await fetch(`/api/job/${jobId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          statusBadgeEl.textContent = "not found";
+          statusBadgeEl.className = "badge bad";
+          return;
+        }
+
+        statusBadgeEl.textContent = data.status;
+        statusBadgeEl.className = statusClass(data.status);
+
+        const progress = Number(data.progress || 0);
+        progressTextEl.textContent = `${progress.toFixed(1)}%`;
+        progressBarEl.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+
+        outputPathEl.textContent = data.output_path;
+        outputSizeEl.textContent = formatBytes(data.output_size);
+        logsEl.textContent = (data.logs || []).join("\n");
+        logsEl.scrollTop = logsEl.scrollHeight;
+
+        if (data.error) {
+          errorEl.textContent = data.error;
+          errorEl.classList.remove("hidden");
+        }
+
+        if (data.status === "done" && data.output_exists) {
+          downloadLinkEl.href = `/download/${jobId}`;
+          downloadWrapEl.classList.remove("hidden");
+        }
+
+        if (data.status === "queued" || data.status === "running") {
+          setTimeout(refresh, 1800);
+        }
+      }
+
+      refresh();
+    </script>
+  </body>
+</html>
