@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import platform
 import re
@@ -19,6 +20,7 @@ BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "outputs"
 TMP_DIR = BASE_DIR / "tmp"
+SETTINGS_FILE = TMP_DIR / "settings.json"
 
 for path in (UPLOAD_DIR, OUTPUT_DIR, TMP_DIR):
     path.mkdir(parents=True, exist_ok=True)
@@ -31,7 +33,8 @@ SUPPORT_LINKS = {
 
 # Prefer bundled runtime when packaged. Fallback to local development path.
 BUNDLED_RUNTIME = BASE_DIR.parent / "runtime" / "video2x-install"
-LOCAL_DEV_RUNTIME = Path("/Users/brandonescamilla/Documents/code/video2x/build")
+LOCAL_DEV_RUNTIME = Path.home() / "Documents" / "code" / "video2x" / "build"
+LOCAL_DEV_INSTALL_RUNTIME = LOCAL_DEV_RUNTIME / "video2x-install"
 
 
 
@@ -40,14 +43,51 @@ def _utc_now_iso() -> str:
 
 
 
-def _resolve_runtime_paths() -> tuple[Path, Path, Path]:
+def _load_settings() -> dict:
+    try:
+        if SETTINGS_FILE.exists():
+            with SETTINGS_FILE.open("r", encoding="utf-8") as fp:
+                data = json.load(fp)
+                if isinstance(data, dict):
+                    return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_settings(data: dict) -> None:
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    with SETTINGS_FILE.open("w", encoding="utf-8") as fp:
+        json.dump(data, fp, indent=2)
+
+
+def _runtime_candidates() -> list[Path]:
+    return [
+        BUNDLED_RUNTIME,
+        LOCAL_DEV_RUNTIME,
+        LOCAL_DEV_INSTALL_RUNTIME,
+    ]
+
+
+def _resolve_runtime_paths(configured_runtime: str | None = None) -> tuple[Path, Path, Path]:
     runtime_override = os.getenv("VIDEO2X_RUNTIME_DIR")
-    if runtime_override:
+    if configured_runtime:
+        configured_dir = Path(configured_runtime).expanduser()
+        has_configured_bin = (configured_dir / "bin" / "video2x").exists() or (
+            configured_dir / "video2x"
+        ).exists()
+        if has_configured_bin:
+            runtime_dir = configured_dir
+        elif runtime_override:
+            runtime_dir = Path(runtime_override)
+        else:
+            runtime_dir = next(
+                (p for p in _runtime_candidates() if p.exists()), LOCAL_DEV_RUNTIME
+            )
+    elif runtime_override:
         runtime_dir = Path(runtime_override)
-    elif BUNDLED_RUNTIME.exists():
-        runtime_dir = BUNDLED_RUNTIME
     else:
-        runtime_dir = LOCAL_DEV_RUNTIME
+        runtime_dir = next((p for p in _runtime_candidates() if p.exists()), LOCAL_DEV_RUNTIME)
 
     bin_override = os.getenv("VIDEO2X_BIN")
     if bin_override:
@@ -73,11 +113,28 @@ def _resolve_runtime_paths() -> tuple[Path, Path, Path]:
 
     return runtime_dir, video2x_bin, workdir
 
-
-VIDEO2X_RUNTIME_DIR, VIDEO2X_BIN, VIDEO2X_WORKDIR = _resolve_runtime_paths()
-
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GB
+
+RUNTIME_LOCK = threading.Lock()
+SETTINGS = _load_settings()
+VIDEO2X_RUNTIME_DIR, VIDEO2X_BIN, VIDEO2X_WORKDIR = _resolve_runtime_paths(
+    SETTINGS.get("runtime_dir")
+)
+
+
+def _refresh_runtime(configured_runtime: str | None = None) -> None:
+    global VIDEO2X_RUNTIME_DIR, VIDEO2X_BIN, VIDEO2X_WORKDIR
+    with RUNTIME_LOCK:
+        VIDEO2X_RUNTIME_DIR, VIDEO2X_BIN, VIDEO2X_WORKDIR = _resolve_runtime_paths(
+            configured_runtime
+        )
+
+
+def _runtime_snapshot() -> tuple[Path, Path, Path]:
+    with RUNTIME_LOCK:
+        return VIDEO2X_RUNTIME_DIR, VIDEO2X_BIN, VIDEO2X_WORKDIR
+
 
 JOBS_LOCK = threading.Lock()
 JOBS: dict[str, dict] = {}
@@ -167,6 +224,8 @@ def _run_video2x(job_id: str) -> None:
     with JOBS_LOCK:
         job = JOBS[job_id]
         cmd = job["cmd"]
+        runtime_dir = Path(job["runtime_dir"])
+        workdir = Path(job["workdir"])
 
     try:
         with JOBS_LOCK:
@@ -180,8 +239,8 @@ def _run_video2x(job_id: str) -> None:
         env.setdefault("OpenMP_ROOT", "/opt/homebrew/opt/libomp")
 
         candidate_lib_dirs = [
-            VIDEO2X_RUNTIME_DIR / "lib",
-            VIDEO2X_RUNTIME_DIR,
+            runtime_dir / "lib",
+            runtime_dir,
         ]
         for lib_dir in candidate_lib_dirs:
             if lib_dir.exists():
@@ -193,7 +252,7 @@ def _run_video2x(job_id: str) -> None:
 
         proc = subprocess.Popen(
             cmd,
-            cwd=str(VIDEO2X_WORKDIR),
+            cwd=str(workdir),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -220,8 +279,14 @@ def _run_video2x(job_id: str) -> None:
 
 @app.get("/")
 def index():
-    runtime_ready = VIDEO2X_BIN.exists()
-    runtime_hint = str(VIDEO2X_BIN)
+    _refresh_runtime(SETTINGS.get("runtime_dir"))
+    runtime_dir, runtime_bin, runtime_workdir = _runtime_snapshot()
+    runtime_ready = runtime_bin.exists()
+    runtime_hint = str(runtime_bin)
+    suggested_runtime = next(
+        (p for p in _runtime_candidates() if p.exists()),
+        LOCAL_DEV_RUNTIME,
+    )
     return render_template(
         "index.html",
         app_name=APP_NAME,
@@ -230,24 +295,63 @@ def index():
         is_macos=(platform.system() == "Darwin"),
         runtime_ready=runtime_ready,
         runtime_hint=runtime_hint,
+        runtime_dir=str(runtime_dir),
+        runtime_workdir=str(runtime_workdir),
+        configured_runtime=SETTINGS.get("runtime_dir", ""),
+        suggested_runtime=str(suggested_runtime),
         error=request.args.get("error", ""),
+        notice=request.args.get("notice", ""),
         support_links=SUPPORT_LINKS,
     )
 
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "app": APP_NAME, "runtime": str(VIDEO2X_BIN)})
+    runtime_dir, runtime_bin, runtime_workdir = _runtime_snapshot()
+    return jsonify(
+        {
+            "ok": True,
+            "app": APP_NAME,
+            "runtime": str(runtime_bin),
+            "runtime_dir": str(runtime_dir),
+            "workdir": str(runtime_workdir),
+        }
+    )
+
+
+@app.post("/setup")
+def setup_runtime():
+    runtime_input = request.form.get("runtime_dir", "").strip()
+    if not runtime_input:
+        return redirect(url_for("index", error="Please provide a runtime folder path."))
+
+    runtime_candidate = str(Path(runtime_input).expanduser())
+    runtime_path = Path(runtime_candidate)
+    candidate_install = runtime_path / "bin" / "video2x"
+    candidate_build = runtime_path / "video2x"
+    if not candidate_install.exists() and not candidate_build.exists():
+        return redirect(
+            url_for(
+                "index",
+                error=f"Could not find video2x binary in: {runtime_candidate}",
+            )
+        )
+
+    SETTINGS["runtime_dir"] = runtime_candidate
+    _save_settings(SETTINGS)
+    _refresh_runtime(runtime_candidate)
+    return redirect(url_for("index", notice="Runtime saved. You can start converting now."))
 
 
 @app.post("/start")
 def start_job():
     try:
-        if not VIDEO2X_BIN.exists():
+        runtime_dir, runtime_bin, runtime_workdir = _runtime_snapshot()
+        if not runtime_bin.exists():
             return redirect(
                 url_for(
                     "index",
-                    error=f"Runtime missing. Expected: {VIDEO2X_BIN}",
+                    error=f"Runtime missing. Expected: {runtime_bin}",
                 )
             )
 
@@ -274,7 +378,7 @@ def start_job():
         uploaded.save(input_path)
 
         cmd = [
-            str(VIDEO2X_BIN),
+            str(runtime_bin),
             "--no-progress",
             "-i",
             str(input_path),
@@ -297,6 +401,8 @@ def start_job():
                 "cmd": cmd,
                 "logs": [],
                 "progress": 0.0,
+                "runtime_dir": str(runtime_dir),
+                "workdir": str(runtime_workdir),
                 "created_at": _utc_now_iso(),
             }
 

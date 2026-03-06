@@ -8,6 +8,7 @@ DIST_DIR="$APP_DIR/dist"
 RELEASE_DIR="$DIST_DIR/release"
 BUILD_DIR="$DIST_DIR/portable_build"
 APP_BUNDLE="$BUILD_DIR/$BUNDLE_NAME"
+ICON_SRC="$APP_DIR/assets/ClipCafe.icns"
 RUNTIME_SRC_DEFAULT="$HOME/Documents/code/video2x/build/video2x-install"
 RUNTIME_SRC="${VIDEO2X_SOURCE_RUNTIME:-$RUNTIME_SRC_DEFAULT}"
 RUNTIME_DEST="$APP_BUNDLE/Contents/Resources/runtime/video2x-install"
@@ -30,6 +31,10 @@ mkdir -p "$BUILD_DIR" "$RELEASE_DIR"
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
+if [[ ! -f "$ICON_SRC" && -x "$APP_DIR/scripts/generate_app_icon.sh" ]]; then
+  "$APP_DIR/scripts/generate_app_icon.sh"
+fi
+
 # Copy backend app
 mkdir -p "$BACKEND_DEST"
 cp "$APP_DIR/app.py" "$BACKEND_DEST/"
@@ -49,6 +54,9 @@ pip install -r "$BACKEND_DEST/requirements.txt"
 mkdir -p "$(dirname "$RUNTIME_DEST")"
 cp -R "$RUNTIME_SRC" "$RUNTIME_DEST"
 cp -R "$MODEL_SRC" "$APP_BUNDLE/Contents/Resources/runtime/models"
+if [[ -f "$ICON_SRC" ]]; then
+  cp "$ICON_SRC" "$APP_BUNDLE/Contents/Resources/ClipCafe.icns"
+fi
 
 # Ensure install binary and main dylib can resolve local runtime libs.
 install_name_tool -add_rpath "@executable_path/../lib" "$RUNTIME_DEST/bin/video2x" 2>/dev/null || true
@@ -84,6 +92,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
   <string>$APP_NAME</string>
   <key>CFBundleExecutable</key>
   <string>clipcafe-launch</string>
+  <key>CFBundleIconFile</key>
+  <string>ClipCafe.icns</string>
   <key>CFBundleIdentifier</key>
   <string>com.brandonescamilla.clipcafe</string>
   <key>CFBundleVersion</key>

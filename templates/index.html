@@ -7,6 +7,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body>
+    <div id="splash" class="splash">
+      <div class="splash-card">
+        <div class="splash-mark">CC</div>
+        <p class="splash-title">{{ app_name }}</p>
+        <p class="splash-sub">Cinematic Upscale, Powered by Video2X</p>
+      </div>
+    </div>
+
     <div class="bg-shape bg-shape-a"></div>
     <div class="bg-shape bg-shape-b"></div>
 
@@ -22,15 +30,38 @@
       <div class="alert error">This app targets macOS only.</div>
       {% endif %}
 
+      {% if notice %}
+      <div class="alert good">{{ notice }}</div>
+      {% endif %}
+
       {% if error %}
       <div class="alert error">{{ error }}</div>
       {% endif %}
 
       {% if not runtime_ready %}
-      <div class="alert warn">
-        Video2X runtime not found at:<br />
-        <code>{{ runtime_hint }}</code>
-      </div>
+      <section class="panel setup-wizard">
+        <h2>First-Run Setup Wizard</h2>
+        <p>
+          ClipCafe could not find Video2X runtime automatically.
+          Paste your runtime folder and save once.
+        </p>
+        <form action="{{ url_for('setup_runtime') }}" method="post" class="form-grid">
+          <label>
+            <span>Runtime folder path</span>
+            <input
+              type="text"
+              name="runtime_dir"
+              value="{{ configured_runtime or suggested_runtime }}"
+              placeholder="/Users/you/Documents/code/video2x/build"
+              required
+            />
+          </label>
+          <button type="submit">Save Runtime Path</button>
+        </form>
+        <p class="meta">
+          Current binary check: <code>{{ runtime_hint }}</code>
+        </p>
+      </section>
       {% endif %}
 
       <section class="panel">
@@ -64,6 +95,10 @@
 
           <button type="submit" {% if not runtime_ready %}disabled{% endif %}>Start Conversion</button>
         </form>
+        <p class="meta">
+          Runtime: <code>{{ runtime_hint }}</code><br />
+          Working dir: <code>{{ runtime_workdir }}</code>
+        </p>
       </section>
 
       <section class="panel support">
@@ -77,10 +112,22 @@
       </section>
 
       <footer class="footnote">
-        <p>
-          This app wraps Video2X workflows and is intended for personal/local use.
-        </p>
+        <p>This app wraps Video2X workflows and is intended for personal/local use.</p>
       </footer>
     </main>
+
+    <script>
+      const splash = document.getElementById("splash");
+      const seen = sessionStorage.getItem("clipcafe_splash_seen");
+      if (seen === "1") {
+        splash.classList.add("hidden");
+      } else {
+        setTimeout(() => {
+          splash.classList.add("splash-out");
+          sessionStorage.setItem("clipcafe_splash_seen", "1");
+          setTimeout(() => splash.classList.add("hidden"), 360);
+        }, 980);
+      }
+    </script>
   </body>
 </html>
