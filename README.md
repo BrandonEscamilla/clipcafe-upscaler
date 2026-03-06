@@ -68,12 +68,6 @@ Portable bundle includes:
 - Video2X runtime
 - Video2X model files
 
-## Optional Env Vars
-
-- `CLIPCAFE_GITHUB_SPONSORS`
-- `CLIPCAFE_KOFI`
-- `VIDEO2X_RUNTIME_DIR`
-
 ## Notes
 
 - macOS only.
